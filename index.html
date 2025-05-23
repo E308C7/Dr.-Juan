@@ -151,16 +151,18 @@
         </div>
     </div>
     <script>
-        // --- Datos simulados en memoria ---
-        let patients = [
-            { id: 1, name: "Ana López", dob: "1990-05-12", condition: "Diabetes", notes: "Control mensual. Última revisión bien." },
-            { id: 2, name: "Carlos Pérez", dob: "1985-11-23", condition: "Hipertensión", notes: "Requiere ajuste de medicación." },
-            { id: 3, name: "María García", dob: "1978-02-17", condition: "Asma", notes: "Sin crisis recientes." }
-        ];
-        let filteredPatients = [...patients];
+        let patients = [];
+        let filteredPatients = [];
         let selectedPatientId = null;
 
-        function renderPatientList() {
+        async function fetchPatients() {
+            const res = await fetch('pacientes.php');
+            patients = await res.json();
+            filteredPatients = [...patients];
+        }
+
+        async function renderPatientList() {
+            await fetchPatients();
             const list = document.getElementById('patientList');
             list.innerHTML = '';
             if (filteredPatients.length === 0) {
@@ -241,33 +243,33 @@
             document.getElementById('patientModal').style.display = 'none';
         }
 
-        function savePatient(event) {
+        async function savePatient(event) {
             event.preventDefault();
             const id = document.getElementById('patientId').value;
             const name = document.getElementById('formName').value;
             const dob = document.getElementById('formDob').value;
             const condition = document.getElementById('formCondition').value;
             const notes = document.getElementById('formNotes').value;
-            if (id) {
-                // Editar paciente existente
-                const idx = patients.findIndex(p => p.id == id);
-                if (idx !== -1) {
-                    patients[idx] = { id: Number(id), name, dob, condition, notes };
-                }
-            } else {
-                // Agregar nuevo paciente
-                const newId = patients.length ? Math.max(...patients.map(p => p.id)) + 1 : 1;
-                patients.push({ id: newId, name, dob, condition, notes });
-            }
-            filteredPatients = [...patients];
+            const payload = { id, name, dob, condition, notes };
+            await fetch('pacientes.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
             closePatientModal();
+            await fetchPatients();
+            filteredPatients = [...patients];
             renderPatientList();
             renderPatientDetails();
         }
 
         // Inicializar
-        renderPatientList();
-        renderPatientDetails();
+        (async function() {
+            await fetchPatients();
+            filteredPatients = [...patients];
+            renderPatientList();
+            renderPatientDetails();
+        })();
     </script>
 </body>
 </html>
