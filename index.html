@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Registro de Pacientes - Dr. Juan</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; background: #f5f5f5; }
+        .container { display: flex; height: 100vh; }
+        .sidebar {
+            width: 350px;
+            background: #fff;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+        .search-bar {
+            padding: 16px;
+            border-bottom: 1px solid #eee;
+            background: #fafafa;
+        }
+        .search-bar input, .search-bar select {
+            margin-bottom: 8px;
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .patient-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .patient-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .patient-item.selected {
+            background: #e6f7ff;
+        }
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 16px;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            gap: 8px;
+        }
+        .top-bar button {
+            padding: 8px 16px;
+            border: none;
+            background: #1890ff;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .top-bar button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .patient-details {
+            padding: 32px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        .empty-details {
+            color: #888;
+            text-align: center;
+            margin-top: 100px;
+        }
+        label { font-weight: bold; }
+        .field { margin-bottom: 12px; }
+        .modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #fff;
+            padding: 24px;
+            border-radius: 8px;
+            min-width: 320px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+        }
+        .modal-content h2 { margin-top: 0; }
+        .modal-content form { display: flex; flex-direction: column; }
+        .modal-content input, .modal-content textarea {
+            margin-bottom: 12px;
+            padding: 8px;
+            font-size: 1em;
+        }
+        .modal-content button {
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar izquierda -->
+        <div class="sidebar">
+            <div class="search-bar">
+                <input type="text" id="searchName" placeholder="Buscar por nombre">
+                <input type="date" id="searchDate" placeholder="Buscar por fecha">
+                <input type="text" id="searchCondition" placeholder="Buscar por padecimiento">
+                <button onclick="applyFilters()">Buscar</button>
+            </div>
+            <div class="patient-list" id="patientList">
+                <!-- Lista de pacientes generada dinámicamente -->
+            </div>
+        </div>
+        <!-- Contenido principal -->
+        <div class="main-content">
+            <div class="top-bar">
+                <button onclick="openPatientModal()">Agregar Paciente</button>
+                <button id="editBtn" onclick="openPatientModal(true)" disabled>Editar Paciente</button>
+            </div>
+            <div class="patient-details" id="patientDetails">
+                <div class="empty-details">Selecciona un paciente para ver los detalles.</div>
+            </div>
+        </div>
+    </div>
+    <!-- Modal para agregar/editar paciente -->
+    <div class="modal" id="patientModal" style="display:none;">
+        <div class="modal-content">
+            <h2 id="modalTitle">Agregar Paciente</h2>
+            <form id="patientForm" onsubmit="savePatient(event)">
+                <input type="hidden" id="patientId">
+                <label>Nombre</label>
+                <input type="text" id="formName" required>
+                <label>Fecha de nacimiento</label>
+                <input type="date" id="formDob" required>
+                <label>Padecimiento</label>
+                <input type="text" id="formCondition" required>
+                <label>Notas</label>
+                <textarea id="formNotes" rows="3"></textarea>
+                <button type="submit">Guardar</button>
+                <button type="button" onclick="closePatientModal()">Cancelar</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        // --- Datos simulados en memoria ---
+        let patients = [
+            { id: 1, name: "Ana López", dob: "1990-05-12", condition: "Diabetes", notes: "Control mensual. Última revisión bien." },
+            { id: 2, name: "Carlos Pérez", dob: "1985-11-23", condition: "Hipertensión", notes: "Requiere ajuste de medicación." },
+            { id: 3, name: "María García", dob: "1978-02-17", condition: "Asma", notes: "Sin crisis recientes." }
+        ];
+        let filteredPatients = [...patients];
+        let selectedPatientId = null;
+
+        function renderPatientList() {
+            const list = document.getElementById('patientList');
+            list.innerHTML = '';
+            if (filteredPatients.length === 0) {
+                list.innerHTML = '<div style="padding:16px;color:#888;">No hay pacientes.</div>';
+                return;
+            }
+            filteredPatients.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'patient-item' + (p.id === selectedPatientId ? ' selected' : '');
+                div.onclick = () => selectPatient(p.id);
+                div.innerHTML = `
+                    <div><strong>${p.name}</strong></div>
+                    <div style="font-size:0.9em;color:#666;">${p.condition}</div>
+                    <div style="font-size:0.8em;color:#aaa;">${p.dob}</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function renderPatientDetails() {
+            const details = document.getElementById('patientDetails');
+            const editBtn = document.getElementById('editBtn');
+            const patient = patients.find(p => p.id === selectedPatientId);
+            if (!patient) {
+                details.innerHTML = '<div class="empty-details">Selecciona un paciente para ver los detalles.</div>';
+                editBtn.disabled = true;
+                return;
+            }
+            editBtn.disabled = false;
+            details.innerHTML = `
+                <h2>${patient.name}</h2>
+                <div class="field"><label>Fecha de nacimiento:</label> ${patient.dob}</div>
+                <div class="field"><label>Padecimiento:</label> ${patient.condition}</div>
+                <div class="field"><label>Notas:</label><br>${patient.notes || '<span style="color:#aaa;">Sin notas</span>'}</div>
+            `;
+        }
+
+        function selectPatient(id) {
+            selectedPatientId = id;
+            renderPatientList();
+            renderPatientDetails();
+        }
+
+        function applyFilters() {
+            const name = document.getElementById('searchName').value.toLowerCase();
+            const date = document.getElementById('searchDate').value;
+            const condition = document.getElementById('searchCondition').value.toLowerCase();
+            filteredPatients = patients.filter(p => {
+                return (
+                    (!name || p.name.toLowerCase().includes(name)) &&
+                    (!date || p.dob === date) &&
+                    (!condition || p.condition.toLowerCase().includes(condition))
+                );
+            });
+            selectedPatientId = null;
+            renderPatientList();
+            renderPatientDetails();
+        }
+
+        function openPatientModal(edit = false) {
+            document.getElementById('patientModal').style.display = 'flex';
+            document.getElementById('patientForm').reset();
+            if (edit && selectedPatientId) {
+                const patient = patients.find(p => p.id === selectedPatientId);
+                document.getElementById('modalTitle').innerText = 'Editar Paciente';
+                document.getElementById('patientId').value = patient.id;
+                document.getElementById('formName').value = patient.name;
+                document.getElementById('formDob').value = patient.dob;
+                document.getElementById('formCondition').value = patient.condition;
+                document.getElementById('formNotes').value = patient.notes;
+            } else {
+                document.getElementById('modalTitle').innerText = 'Agregar Paciente';
+                document.getElementById('patientId').value = '';
+            }
+        }
+
+        function closePatientModal() {
+            document.getElementById('patientModal').style.display = 'none';
+        }
+
+        function savePatient(event) {
+            event.preventDefault();
+            const id = document.getElementById('patientId').value;
+            const name = document.getElementById('formName').value;
+            const dob = document.getElementById('formDob').value;
+            const condition = document.getElementById('formCondition').value;
+            const notes = document.getElementById('formNotes').value;
+            if (id) {
+                // Editar paciente existente
+                const idx = patients.findIndex(p => p.id == id);
+                if (idx !== -1) {
+                    patients[idx] = { id: Number(id), name, dob, condition, notes };
+                }
+            } else {
+                // Agregar nuevo paciente
+                const newId = patients.length ? Math.max(...patients.map(p => p.id)) + 1 : 1;
+                patients.push({ id: newId, name, dob, condition, notes });
+            }
+            filteredPatients = [...patients];
+            closePatientModal();
+            renderPatientList();
+            renderPatientDetails();
+        }
+
+        // Inicializar
+        renderPatientList();
+        renderPatientDetails();
+    </script>
+</body>
+</html>
